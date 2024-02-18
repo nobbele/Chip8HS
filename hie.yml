@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "test"
+      component: "chip8:test:test"
+
+    - path: "src"
+      component: "lib:chip8"
+
+    - path: "app/Main.hs"
+      component: "chip8:exe:chip8"

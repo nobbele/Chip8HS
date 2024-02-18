@@ -1,0 +1,35 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true,
+    "**/.hg/store/**": true,
+    "**/.repos": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/_build": true,
+    "**/_esy": true,
+    "**/.classpath": true,
+    "**/.factorypath": true,
+    "**/.next": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/bin": true,
+    "**/esy.lock": true,
+    "**/node_modules": true,
+    "**/obj": true,
+    "**/.repos": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/*.code-search": true,
+    "**/.repos": true
+  }
+}
