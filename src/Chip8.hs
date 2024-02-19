@@ -3,8 +3,8 @@
 {-# HLINT ignore "Redundant lambda" #-}
 module Chip8 where
 
+import Control.Monad.State.Strict
 import Data.Bits
-import Data.Functor
 import Data.Maybe
 import Data.Word (Word16, Word8)
 import Debug.Trace (trace)
@@ -12,102 +12,121 @@ import Helper
 import Machine
 import Memory
 import System.Random.Stateful
+import GHC.Base
 
-runConditional :: Bool -> Machine -> Word16
-runConditional cond machine = if cond then currentPc + 4 else currentPc + 2
-  where
-    currentPc = regpc machine
+selectMathOperator :: Word8 -> Word8 -> Word8 -> Word8
+selectMathOperator sel = case sel of
+  0 -> (\_ src -> src)
+  1 -> (.|.)
+  2 -> (.&.)
+  3 -> (.^.)
+  4 -> (+)
+  5 -> (-)
+  6 -> (\dst _ -> dst `shiftR` 1)
+  7 -> flip (-)
+  0xE -> (\dst _ -> dst `shiftL` 1)
+  _ -> error "Invalid math operation"
+  :: Word8 -> Word8 -> Word8
 
-runConditional1 :: (Word8 -> Bool) -> Word8 -> Machine -> Word16
-runConditional1 cond vIndex machine = runConditional (cond currentV) machine
-  where
-    currentV = regvi vIndex machine
+data OpcodeResult = Continue | Skip | Jump Word16
 
-runConditional2 :: (Word8 -> Word8 -> Bool) -> Word8 -> Word8 -> Machine -> Word16
-runConditional2 cond vIndex vIndex2 machine = runConditional (cond currentVx currentVy) machine
-  where
-    currentVx = regvi vIndex machine
-    currentVy = regvi vIndex2 machine
+runOpcode :: (Word8, Word8, Word8, Word8) -> MachineST OpcodeResult
+runOpcode (0, 0, 0xE, 0xE) = do
+  returnAddress <- popStack2
+  return . Jump $ fromJust returnAddress
+runOpcode (1, a, b, c) = return . Jump $ packNibbles3 a b c
+runOpcode (2, a, b, c) = do
+  pushStack2 =<< gets regpc
+  return . Jump $ packNibbles3 a b c
+runOpcode (3, idx, a, b) = do
+  let cmpValue = packNibbles2 a b
+  regValue <- getRegV idx
+  return $ if regValue == cmpValue
+    then Skip
+    else Continue
+runOpcode (4, idx, a, b) = do
+  let cmpValue = packNibbles2 a b
+  regValue <- getRegV idx
+  return $ if regValue /= cmpValue
+    then Skip
+    else Continue
+runOpcode (5, xIdx, yIdx, 0) = do
+  xValue <- getRegV xIdx
+  yValue <- getRegV yIdx
+  return $ if xValue == yValue
+    then Skip
+    else Continue
+runOpcode (6, idx, a, b) = do
+  let value = packNibbles2 a b
+  updateRegV idx value
+  return Continue
+runOpcode (7, idx, a, b) = do
+  let value = packNibbles2 a b
+  regValue <- getRegV idx
+  updateRegV idx $ regValue + value
+  return Continue
+runOpcode (8, dstIdx, srcIdx, sel) = do
+  dstVal <- getRegV dstIdx
+  srcVal <- getRegV srcIdx
+  let op = selectMathOperator sel
 
-extractNibbles3 :: (Word8, Word8, Word8, Word8) -> Word16
-extractNibbles3 (_, valueA, valueB, valueC) = mergeNibble3 valueA valueB valueC
+  -- Updates the destination register with the result of the math operation
+  let mathResult = dstVal `op` srcVal
+  updateRegV dstIdx mathResult
 
-performRand :: Word8 -> Word8 -> Machine -> IO Machine
-performRand vIndex mask machine = ioValue <&> (\value -> updateRegV (value .&. mask) vIndex machine)
-  where
-    ioValue = getStdRandom genWord8 :: IO Word8
+  -- Updates the VF register in case of overflow/underflow
+  vfValue <- case sel of
+      4 -> return $ if (toInteger dstVal + toInteger srcVal) >= 256 then 1 else 0
+      5 -> return $ if srcVal > dstVal then 0 else 1
+      6 -> return $ dstVal .&. 0x01
+      7 -> return $ if dstVal > srcVal then 0 else 1
+      8 -> return $ dstVal .&. 0x80
+      _ -> getRegV 0xF
+  updateRegV 0xF vfValue
 
-data OpcodeResult = Continue | Jump Word16 | VmIO (IO Machine)
+  return Continue
+runOpcode (9, xIdx, yIdx, 0) = do
+  xValue <- getRegV xIdx
+  yValue <- getRegV yIdx
+  return $ if xValue /= yValue
+    then Skip
+    else Continue
+runOpcode (0xA, a, b, c) = do
+  updateRegI $ packNibbles3 a b c
+  return Continue
+runOpcode (0xC, idx, a, b) = do
+  value <- liftIO $ getStdRandom genWord8
 
-runOpcode :: (Word8, Word8, Word8, Word8) -> Machine -> (OpcodeResult, Machine)
--- return
-runOpcode (0, 0, 0xE, 0xE) machine = (Jump $ fromJust returnAddress, newMachine)
-  where
-    (returnAddress, newMachine) = popStack16 machine
--- jmp NNN
-runOpcode op@(1, _, _, _) machine = (Jump $ extractNibbles3 op, machine)
--- call NNN
-runOpcode op@(2, _, _, _) machine = (Jump $ extractNibbles3 op, pushStack16 (regpc machine) machine)
--- if (Vx == NN): skip
-runOpcode (3, vIndex, valueA, valueB) machine = (Jump $ runConditional1 (== cmpValue) vIndex machine, machine)
-  where
-    cmpValue = mergeNibble valueA valueB
--- if (Vx != NN): skip
-runOpcode (4, vIndex, valueA, valueB) machine = (Jump $ runConditional1 (/= cmpValue) vIndex machine, machine)
-  where
-    cmpValue = mergeNibble valueA valueB
--- if (Vx == Vy): skip
-runOpcode (5, vIndex, vIndex2, 0) machine = (Jump $ runConditional2 (==) vIndex vIndex2 machine, machine)
--- Vx = NN
-runOpcode (6, vIndex, valueA, valueB) machine = (Continue, applyToReg (\_ x -> x) vIndex (valueA, valueB) machine)
--- Vx += NN
-runOpcode (7, vIndex, valueA, valueB) machine = (Continue, applyToReg (+) vIndex (valueA, valueB) machine)
-runOpcode (8, dstIndex, srcIndex, c) machine = (Continue, updateRegV valueVF 0xF (applyTo2Regs mathOp dstIndex srcIndex machine))
-  where
-    mathOp = case c of
-      0 -> (\_ src -> src)
-      1 -> (.|.)
-      2 -> (.&.)
-      3 -> (.^.)
-      4 -> (+)
-      5 -> (-)
-      6 -> (\dst _ -> dst `shiftR` 1)
-      7 -> flip (-)
-      0xE -> (\dst _ -> dst `shiftL` 1)
-      _ -> error "Invalid math operation"
-    valueVF = case c of
-      4 -> if (toInteger dstVal + toInteger srcVal) >= 256 then 1 else 0
-      5 -> if srcVal > dstVal then 0 else 1
-      6 -> dstVal .&. 0x01
-      7 -> if dstVal > srcVal then 0 else 1
-      8 -> dstVal .&. 0x80
-      _ -> regvi 0xF machine
-      where
-        dstVal = regvi dstIndex machine
-        srcVal = regvi srcIndex machine
--- if (Vx != Vy): skip
-runOpcode (9, vIndex, vIndex2, 0) machine = (Jump $ runConditional2 (/=) vIndex vIndex2 machine, machine)
--- I = NNN
-runOpcode op@(0xA, _, _, _) machine = (Continue, updateI (extractNibbles3 op) machine)
-runOpcode (0xC, vIndex, valueA, valueB) machine = (VmIO $ performRand vIndex value machine, machine)
-  where
-    value = mergeNibble valueA valueB
-runOpcode _ machine = trace "Invalid opcode" (Continue, machine)
+  let mask = packNibbles2 a b
+  let maskedValue = value .&. mask
+  updateRegV idx maskedValue
 
-runOpcodeByte :: Word16 -> Machine -> (OpcodeResult, Machine)
-runOpcodeByte = runOpcode . extractNibbles16
+  return Continue
+runOpcode _ = return $ trace "Invalid opcode" Continue
 
-finishCycle :: OpcodeResult -> Machine -> IO Machine
-finishCycle result machine = case result of
-  Continue -> return $ applyToPc (+ 2) machine
-  Jump dst -> return $ machine {regpc = dst}
-  VmIO ioMachine -> applyToPc (+ 2) <$> ioMachine
+runOpcodeByte :: Word16 -> MachineST ()
+runOpcodeByte op = do
+  r <- runOpcode $ unpackNibbles4 op
+  currentPc <- gets regpc
+  case r of
+    Continue -> updateRegPc (currentPc + 2)
+    Skip -> updateRegPc (currentPc + 4)
+    Jump t -> updateRegPc t
+
+runCycle :: MachineST Bool
+runCycle = do
+  memory <- gets mem
+  currentPc <- gets regpc
+  case readWord currentPc memory of
+    Just opcode -> do
+      runOpcodeByte opcode
+      return True
+    Nothing -> return False
+
+runMachineST :: MachineST ()
+runMachineST = do
+  r <- runCycle
+  when r runMachineST
 
 runMachine :: Machine -> IO Machine
-runMachine machine = case maybeOpcode of
-  Just opcode -> runMachine =<< (finishCycle_ . runOpcodeByte opcode) machine
-    where
-      finishCycle_ = uncurry finishCycle
-  Nothing -> return machine
-  where
-    maybeOpcode = readWord (regpc machine) (mem machine)
+runMachine = execStateT runMachineST

@@ -1,8 +1,7 @@
 module Main where
 
 import Chip8
-import Data.Vector.Generic (replicate)
-import Data.Vector.Unboxed (fromList)
+import Data.Vector.Generic
 import Data.Word (Word8)
 import Machine
 import Prelude hiding (replicate)
@@ -58,7 +57,6 @@ main = print =<< machine
         { regv = replicate 16 (0 :: Word8),
           regi = 0,
           regpc = 0x0,
-          -- mem = fromList [0xC0, 0xFF],
           mem = fromList fibonacciCode,
           stack = []
         }

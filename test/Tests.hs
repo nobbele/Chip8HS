@@ -58,21 +58,21 @@ testMath =
         machine <- runMachine defaultMachine {mem = fromList [0x60, 14, 0x61, 5, 0x80, 0x14]}
         assertEqual "V0 = 14; V1 = 5; V0 += V1 (0)" 19 (regv machine ! 0)
         assertEqual "V0 = 14; V1 = 5; V0 += V1 (1)" 5 (regv machine ! 1)
-        assertEqual "V0 = 14; V1 = 5; V0 += V1 (2)" 0 (regvi 0xF machine)
+        assertEqual "V0 = 14; V1 = 5; V0 += V1 (2)" 0 (getRegV_ 0xF machine)
 
         machine <- runMachine defaultMachine {mem = fromList [0x60, 128, 0x61, 128, 0x80, 0x14]}
-        assertEqual "V0 = 128; V1 = 128; V0 += V1 (0)" 0 (regvi 0 machine)
-        assertEqual "V0 = 128; V1 = 128; V0 += V1 (1)" 1 (regvi 0xF machine)
+        assertEqual "V0 = 128; V1 = 128; V0 += V1 (0)" 0 (getRegV_ 0 machine)
+        assertEqual "V0 = 128; V1 = 128; V0 += V1 (1)" 1 (getRegV_ 0xF machine)
 
         machine <- runMachine defaultMachine {mem = fromList [0x60, 14, 0x61, 5, 0x80, 0x15]}
-        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (0)" 9 (regvi 0 machine)
-        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (1)" 5 (regvi 1 machine)
-        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (2)" 1 (regvi 0xF machine)
+        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (0)" 9 (getRegV_ 0 machine)
+        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (1)" 5 (getRegV_ 1 machine)
+        assertEqual "V0 = 14; V1 = 5; V0 -= V1 (2)" 1 (getRegV_ 0xF machine)
 
         machine <- runMachine defaultMachine {mem = fromList [0x60, 14, 0x61, 16, 0x80, 0x15]}
-        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (0)" 254 (regvi 0 machine)
-        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (1)" 16 (regvi 1 machine)
-        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (2)" 0 (regvi 0xF machine)
+        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (0)" 254 (getRegV_ 0 machine)
+        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (1)" 16 (getRegV_ 1 machine)
+        assertEqual "V0 = 14; V1 = 16; V0 -= V1 (2)" 0 (getRegV_ 0xF machine)
 
         machine <- runMachine defaultMachine {mem = fromList [0x60, 0x5, 0x80, 0x16]}
         assertEqual "V0 = 5; V0 >>= 1 (0)" 0x02 (regv machine ! 0)
@@ -108,8 +108,6 @@ testControlFlow =
         machine <- runMachine defaultMachine {mem = fromList [0x60, 16, 0x40, 16, 0x10, 0x08, 0x60, 5, 0x61, 10]}
         assertEqual "V0 = 16; if (V0 != 16) skip; goto after; V0 = 5; after: V1 = 10 (0)" 16 (regv machine ! 0)
         assertEqual "V0 = 16; if (V0 != 16) skip; goto after; V0 = 5; after: V1 = 10 (0)" 10 (regv machine ! 1)
-
-        -- TODO Test if-instructions
     )
 
 main :: IO Counts
