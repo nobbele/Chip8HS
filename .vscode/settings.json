@@ -31,5 +31,6 @@
     "**/bower_components": true,
     "**/*.code-search": true,
     "**/.repos": true
-  }
+  },
+  "editor.tabSize": 2
 }

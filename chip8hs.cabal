@@ -1,43 +1,43 @@
-cabal-version:      3.8
-name:               chip8
-version:            0.1.0.0
+cabal-version: 3.8
+name:          chip8
+version:       0.1.0.0
+author:        nobbele
+maintainer:    realnobbele@gmail.com
 
-author:             nobbele
-maintainer:         realnobbele@gmail.com
-
-Test-Suite test
-    type: exitcode-stdio-1.0
-    ghc-options: -Wall
-    hs-source-dirs: test
-    main-is:    Tests.hs
-    build-depends:
-        base,
-        HUnit,
-        chip8,
-        containers ^>=0.7
+test-suite test
+  type:           exitcode-stdio-1.0
+  ghc-options:    -Wall
+  hs-source-dirs: test
+  main-is:        Tests.hs
+  build-depends:
+    , base
+    , chip8
+    , containers  ^>=0.7
+    , HUnit
+    , vector      ^>=0.13.1.0
 
 library
-  hs-source-dirs: src
+  hs-source-dirs:  src
   exposed-modules:
-    Memory
+    Chip8
     Helper
     Machine
-    Chip8
+    Memory
+
   other-modules:
-
-  ghc-options: -Wall
-
+  ghc-options:     -Wall
   build-depends:
-    base ^>=4.17.2.1,
-    containers ^>=0.7
+    , base        ^>=4.17.2.1
+    , containers  ^>=0.7
+    , random      ^>=1.2.1.2
+    , vector      ^>=0.13.1.0
 
 executable chip8
-    hs-source-dirs: app
-    main-is: Main.hs
-
-    ghc-options: -Wall
-
-    build-depends:
-        base ^>=4.17.2.1,
-        containers ^>=0.7,
-        chip8
+  hs-source-dirs: app
+  main-is:        Main.hs
+  ghc-options:    -Wall
+  build-depends:
+    , base        ^>=4.17.2.1
+    , chip8
+    , containers  ^>=0.7
+    , vector      ^>=0.13.1.0
