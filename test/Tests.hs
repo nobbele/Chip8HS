@@ -4,22 +4,11 @@
 {-# HLINT ignore "Use head" #-}
 
 import Chip8
-import Data.Vector.Generic (replicate, (!))
+import Data.Vector.Generic ((!))
 import Data.Vector.Unboxed (fromList)
-import Data.Word (Word8)
 import Machine
 import Test.HUnit
 import Prelude hiding (replicate)
-
-defaultMachine :: Machine
-defaultMachine =
-  Machine
-    { regv = replicate 16 (0 :: Word8),
-      regi = 0,
-      regpc = 0x0,
-      mem = fromList [],
-      stack = []
-    }
 
 testAssign :: Test
 testAssign =
@@ -109,6 +98,8 @@ testControlFlow =
         assertEqual "V0 = 16; if (V0 != 16) skip; goto after; V0 = 5; after: V1 = 10 (0)" 16 (regv machine ! 0)
         assertEqual "V0 = 16; if (V0 != 16) skip; goto after; V0 = 5; after: V1 = 10 (0)" 10 (regv machine ! 1)
     )
+
+-- TODO framebuffer tests
 
 main :: IO Counts
 main = do

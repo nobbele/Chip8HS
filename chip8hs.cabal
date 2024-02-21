@@ -12,7 +12,7 @@ test-suite test
   build-depends:
     , base
     , chip8
-    , containers  ^>=0.7
+    , containers  ^>=0.6.8
     , HUnit
     , vector      ^>=0.13.1.0
 
@@ -28,7 +28,7 @@ library
   ghc-options:     -Wall
   build-depends:
     , base        ^>=4.17.2.1
-    , containers  ^>=0.7
+    , containers  ^>=0.6.8
     , mtl         ^>=2.3.1
     , random      ^>=1.2.1.2
     , vector      ^>=0.13.1.0
@@ -40,5 +40,7 @@ executable chip8
   build-depends:
     , base        ^>=4.17.2.1
     , chip8
-    , containers  ^>=0.7
+    , containers  ^>=0.6.8
+    , mtl         ^>=2.3.1
+    , sdl2        ^>=2.5.5.0
     , vector      ^>=0.13.1.0

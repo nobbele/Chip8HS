@@ -13,11 +13,14 @@ packBytes2 :: Word8 -> Word8 -> Word16
 packBytes2 a b = shiftL (fromIntegral a) 8 .|. fromIntegral b
 
 packBytes2L :: [Word8] -> Maybe Word16
-packBytes2L (a : b : _) = Just (shiftL (fromIntegral a) 8 .|. fromIntegral b)
+packBytes2L (a : b : _) = Just $ packBytes2 a b
 packBytes2L _ = Nothing
 
 unpackBytes2 :: Word16 -> (Word8, Word8)
-unpackBytes2 n = (fromIntegral (shiftR (n .&. 0xFF00) 0), fromIntegral (n .&. 0xFF))
+unpackBytes2 n = (fromIntegral (shiftR (n .&. 0xFF00) 8), fromIntegral (n .&. 0xFF))
+
+unpackBytes2L :: Word16 -> [Word8]
+unpackBytes2L n = [fromIntegral (shiftR (n .&. 0xFF00) 8), fromIntegral (n .&. 0xFF)]
 
 unpackNibbles2 :: Word8 -> (Word8, Word8)
 unpackNibbles2 n = (shiftR (n .&. 0xF0) 4, n .&. 0x0F)
