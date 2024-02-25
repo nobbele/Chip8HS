@@ -90,8 +90,11 @@ runMachineCycle = do
   (_, machine') <- liftIO . runCycle =<< gets machine_
   modify' $ \s -> s {machine_ = machine'}
 
-drawPixel :: SDL.Renderer -> SDL.Window -> Int -> Int -> IO ()
-drawPixel renderer window x y = do
+drawPixel :: Int -> Int -> AppST ()
+drawPixel x y = do
+  renderer <- gets renderer_
+  window <- gets window_
+
   SDL.V2 cwindowSizeX cwindowSizeY <- SDL.get (SDL.windowSize window)
 
   let windowSizeX = fromIntegral cwindowSizeX
@@ -105,11 +108,9 @@ drawPixel renderer window x y = do
 
 draw :: AppST ()
 draw = do
-  renderer <- gets renderer_
-  window <- gets window_
   machine <- gets machine_
 
-  liftIO $ mapFrameBuffer (\x y p -> when p $ drawPixel renderer window x y) machine
+  mapFrameBuffer (\x y p -> when p $ drawPixel x y) machine
 
 appLoop :: AppST ()
 appLoop = do

@@ -168,7 +168,7 @@ writeFrameBuffer x y v = do
 clearFrameBuffer :: MachineST ()
 clearFrameBuffer = modify $ \m -> m {frameBuffer = defaultFrameBuffer}
 
-mapFrameBuffer :: (Int -> Int -> Bool -> IO ()) -> Machine -> IO ()
+mapFrameBuffer :: (Monad m) => (Int -> Int -> Bool -> m ()) -> Machine -> m ()
 mapFrameBuffer f = V.imapM_ (UV.imapM_ . flip f) . frameBuffer
 
 applyToReg :: (Word8 -> Word8) -> Word8 -> MachineST ()
