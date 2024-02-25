@@ -3,6 +3,7 @@ module Main where
 import Chip8
 import Control.Monad
 import Control.Monad.State.Strict
+import qualified Data.ByteString.Lazy as B
 import Data.String
 import GHC.Num (integerDiv)
 import GHC.Word
@@ -10,69 +11,6 @@ import Machine
 import SDL (Point (P), V2 (V2), V4 (V4), ($=))
 import qualified SDL
 import Prelude hiding (replicate)
-
-fibonacciCode :: [Word16]
-fibonacciCode =
-  [ --- Parameters ---
-    -- V2 = K
-    0x6210,
-    -- V0 = 0
-    0x6000,
-    -- V1 = 1
-    0x6101,
-    ----------------------
-    -- V2 -= 2
-    0x72FE, -- (-2)
-    -- loop: (0x008)
-    -- V2 -= 1
-    0x72FF, -- (-1)
-    -- V3 = V0
-    0x8300,
-    -- V3 += V1
-    0x8314,
-    -- V0 = V1
-    0x8010,
-    -- V1 = V3
-    0x8130,
-    -- draw(V0, V1, 0)
-    0xD210,
-    -- if (V2 == 0) skip
-    0x3200,
-    -- jmp loop (0x208)
-    0x1208,
-    -- V0 = V1
-    0x8010
-  ]
-
-abcCode :: [Word16]
-abcCode =
-  [ -- V0 = 0x0A
-    0x600A,
-    -- V1 = 0x00
-    0x6100,
-    -- V2 = 0x00
-    0x6200,
-    -- I = sprite_addr[V0]
-    0xF029,
-    -- draw(V1, V2, 5),
-    0xD125,
-    -- V0 += 1
-    0x7001,
-    -- I = sprite_addr[V0]
-    0xF029,
-    -- V1 += 5
-    0x7105,
-    -- draw(V1, V2, 5),
-    0xD125,
-    -- V0 += 1
-    0x7001,
-    -- I = sprite_addr[V0]
-    0xF029,
-    -- V1 += 5
-    0x7105,
-    -- draw(V1, V2, 5),
-    0xD125
-  ]
 
 data AppState = AppState
   { window_ :: SDL.Window,
@@ -109,16 +47,51 @@ draw = do
 
   mapFrameBuffer (\x y p -> when p $ drawPixel x y) machine
 
+keyOfKbEvent :: SDL.KeyboardEventData -> SDL.Keycode
+keyOfKbEvent = SDL.keysymKeycode . SDL.keyboardEventKeysym
+
+handleKeyUpdateEvent :: SDL.Event -> AppST ()
+handleKeyUpdateEvent e = case SDL.eventPayload e of
+  SDL.KeyboardEvent keyboardEvent -> case getNum . keyOfKbEvent $ keyboardEvent of
+    Just key -> modify $ \st -> st {machine_ = updateKey_ key (SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed) $ machine_ st}
+    Nothing -> return ()
+  _ -> return ()
+  where
+    getNum :: SDL.Keycode -> Maybe Word8
+    getNum SDL.Keycode1 = Just 1
+    getNum SDL.Keycode2 = Just 2
+    getNum SDL.Keycode3 = Just 3
+    getNum SDL.Keycode4 = Just 0xC
+    getNum SDL.KeycodeQ = Just 4
+    getNum SDL.KeycodeW = Just 5
+    getNum SDL.KeycodeE = Just 6
+    getNum SDL.KeycodeR = Just 0xD
+    getNum SDL.KeycodeA = Just 7
+    getNum SDL.KeycodeS = Just 8
+    getNum SDL.KeycodeD = Just 9
+    getNum SDL.KeycodeF = Just 0xE
+    getNum SDL.KeycodeZ = Just 0xA
+    getNum SDL.KeycodeX = Just 0
+    getNum SDL.KeycodeC = Just 0xB
+    getNum SDL.KeycodeV = Just 0xF
+    getNum _ = Nothing
+
 appLoop :: AppST ()
 appLoop = do
   events <- SDL.pollEvents
   let escPressed = flip any events $ \e -> case SDL.eventPayload e of
         SDL.KeyboardEvent keyboardEvent ->
           SDL.keyboardEventKeyMotion keyboardEvent == SDL.Pressed
-            && SDL.keysymKeycode (SDL.keyboardEventKeysym keyboardEvent) == SDL.KeycodeEscape
+            && keyOfKbEvent keyboardEvent == SDL.KeycodeEscape
         SDL.WindowClosedEvent _ -> True
         _ -> False
 
+  forM_ events handleKeyUpdateEvent
+
+  -- TODO 60hz timing
+  modify $ \st -> st {machine_ = tickTimers_ $ machine_ st}
+
+  -- TODO 500hz timing
   runMachineCycle
 
   renderer <- gets renderer_
@@ -136,11 +109,11 @@ main = do
   window <- SDL.createWindow (fromString "My SDL Application") SDL.defaultWindow
   renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
 
+  programCode <- B.unpack <$> B.readFile "test_opcode.ch8"
+
   evalStateT appLoop $
     AppState window renderer $
-      appendProgram
-        abcCode
-        defaultMachine
+      fullMachineWithProgram programCode
 
   SDL.destroyWindow window
   return ()

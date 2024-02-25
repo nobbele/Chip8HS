@@ -1,9 +1,11 @@
 module Machine where
 
+import Control.Monad (when)
 import Control.Monad.State.Strict
 import Data.Bits ((.^.))
+import qualified Data.IntSet as IS
 import qualified Data.Vector as V
-import Data.Vector.Generic ((!), (!?), (++), (//))
+import Data.Vector.Generic ((!), (++), (//))
 import qualified Data.Vector.Unboxed as UV
 import Data.Word (Word16, Word8)
 import Helper
@@ -19,7 +21,10 @@ data Machine = Machine
     regpc :: Word16,
     mem :: UV.Vector Word8,
     stack :: [Word8],
-    frameBuffer :: FrameBuffer
+    frameBuffer :: FrameBuffer,
+    keyStates :: IS.IntSet,
+    delayTimer :: Word8,
+    soundTimer :: Word8
   }
 
 defaultFrameBuffer :: FrameBuffer
@@ -117,7 +122,28 @@ defaultMachine =
       regpc = 0x200,
       mem = UV.fromList defaultFontBuffer ++ UV.replicate (0x200 - length defaultFontBuffer) (0 :: Word8),
       stack = [],
-      frameBuffer = defaultFrameBuffer
+      frameBuffer = defaultFrameBuffer,
+      keyStates = IS.empty,
+      delayTimer = 0,
+      soundTimer = 0
+    }
+
+fullMachineWithProgram :: [Word8] -> Machine
+fullMachineWithProgram progData =
+  Machine
+    { regv = UV.replicate 16 (0 :: Word8),
+      regi = 0,
+      regpc = 0x200,
+      mem =
+        UV.fromList defaultFontBuffer
+          ++ UV.replicate (0x200 - length defaultFontBuffer) (0 :: Word8)
+          ++ UV.fromList progData
+          ++ UV.replicate (0x1000 - (length defaultFontBuffer + length progData + 0x200)) (0 :: Word8),
+      stack = [],
+      frameBuffer = defaultFrameBuffer,
+      keyStates = IS.empty,
+      delayTimer = 0,
+      soundTimer = 0
     }
 
 appendToMemory :: [Word8] -> Machine -> Machine
@@ -132,35 +158,51 @@ getRegV_ :: Word8 -> Machine -> Word8
 getRegV_ idx m = regv m ! fromIntegral idx
 
 getRegV :: Word8 -> MachineST Word8
-getRegV idx = getRegV_ idx <$> get
+getRegV idx = gets $ getRegV_ idx
 
 getFrameBuffer :: MachineST FrameBuffer
-getFrameBuffer = frameBuffer <$> get
+getFrameBuffer = gets frameBuffer
+
+getKeyDown :: Word8 -> MachineST Bool
+getKeyDown k = gets $ IS.member (fromIntegral k) . keyStates
 
 updateRegI :: Word16 -> MachineST ()
 updateRegI v = modify $ \m -> m {regi = v}
 
 updateRegV :: Word8 -> Word8 -> MachineST ()
-updateRegV idx v = modify $ \m -> m {regv = regv m // [(fromIntegral idx, v)]}
+updateRegV idx v = do
+  when (idx > 16) $ error "Register index out of bounds"
+  modify $ \m -> m {regv = regv m // [(fromIntegral idx, v)]}
 
 updateRegPc :: Word16 -> MachineST ()
 updateRegPc v = modify $ \m -> m {regpc = v}
 
+updateKey_ :: Word8 -> Bool -> Machine -> Machine
+updateKey_ k v m = m {keyStates = set (fromIntegral k) $ keyStates m}
+  where
+    set = if v then IS.insert else IS.delete
+
+updateDelayTimer :: Word8 -> MachineST ()
+updateDelayTimer t = modify $ \m -> m {delayTimer = t}
+
+updateSoundTimer :: Word8 -> MachineST ()
+updateSoundTimer t = modify $ \m -> m {soundTimer = t}
+
+tickTimers_ :: Machine -> Machine
+tickTimers_ m = m {delayTimer = max 0 $ delayTimer m - 1, soundTimer = max 0 $ soundTimer m - 1}
+
 writeFrameBuffer :: Word8 -> Word8 -> Bool -> MachineST Bool
 writeFrameBuffer x y v = do
+  let wrappedY = fromIntegral y `rem` 32
+  let wrappedX = fromIntegral x `rem` 64
   fb <- gets frameBuffer
-  let r = do
-        row <- fb !? fromIntegral y
-        p <- row !? fromIntegral x
-        return (row, p)
-  case r of
-    Just (row, p) -> do
-      let flipped = p && v
-          row' = row // [(fromIntegral x, p .^. v)]
-          fb' = fb // [(fromIntegral y, row')]
-      modify $ \m -> m {frameBuffer = fb'}
-      return flipped
-    Nothing -> return False
+  let p = row ! wrappedX
+      row = fb ! wrappedY
+  let flipped = p && v
+      row' = row // [(wrappedX, p .^. v)]
+      fb' = fb // [(wrappedY, row')]
+  modify $ \m -> m {frameBuffer = fb'}
+  return flipped
 
 clearFrameBuffer :: MachineST ()
 clearFrameBuffer = modify $ \m -> m {frameBuffer = defaultFrameBuffer}

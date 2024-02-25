@@ -39,6 +39,7 @@ executable chip8
   ghc-options:    -Wall -Wno-unrecognised-pragmas
   build-depends:
     , base        ^>=4.17.2.1
+    , bytestring  ^>=0.11.5.3
     , chip8
     , containers  ^>=0.6.8
     , mtl         ^>=2.3.1

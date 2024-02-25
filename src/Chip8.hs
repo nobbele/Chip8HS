@@ -12,6 +12,8 @@ import System.Random.Stateful
 import GHC.Base
 import qualified Data.Vector.Generic as GV
 import qualified Data.Vector as V
+import Numeric (showHex)
+import GHC.Num (integerDiv)
 
 selectMathOperator :: Word8 -> Word8 -> Word8 -> Word8
 selectMathOperator sel = case sel of
@@ -29,13 +31,31 @@ selectMathOperator sel = case sel of
 
 data OpcodeResult = Continue | Skip | Jump Word16
 
+skipWhen :: Bool -> MachineST OpcodeResult
+skipWhen b = return $ if b then Skip else Continue
+
+skipUnless :: Bool -> MachineST OpcodeResult
+skipUnless = skipWhen <$> not
+
+getRegV2 :: Word8 -> Word8 -> MachineST (Word8, Word8)
+getRegV2 a b = do
+  x <- getRegV a
+  y <- getRegV b
+  return (x, y)
+
+bcd :: Word8 -> (Word8, Word8, Word8)
+bcd n = (hundreds,tens, ones)
+  where ones = n `rem` 10
+        tens = fromIntegral (fromIntegral n `integerDiv` 10) `rem` 10
+        hundreds = fromIntegral (fromIntegral n `integerDiv` 100) `rem` 10
+
 runOpcode :: (Word8, Word8, Word8, Word8) -> MachineST OpcodeResult
 runOpcode (0, 0, 0xE, 0) = do
   clearFrameBuffer
   return Continue
 runOpcode (0, 0, 0xE, 0xE) = do
   returnAddress <- popStack2
-  return . Jump $ fromJust returnAddress
+  return . Jump . (+2) $ fromJust returnAddress
 runOpcode (1, a, b, c) = return . Jump $ packNibbles3 a b c
 runOpcode (2, a, b, c) = do
   pushStack2 =<< gets regpc
@@ -43,21 +63,14 @@ runOpcode (2, a, b, c) = do
 runOpcode (3, idx, a, b) = do
   let cmpValue = packNibbles2 a b
   regValue <- getRegV idx
-  return $ if regValue == cmpValue
-    then Skip
-    else Continue
+  skipWhen $ regValue == cmpValue
 runOpcode (4, idx, a, b) = do
   let cmpValue = packNibbles2 a b
   regValue <- getRegV idx
-  return $ if regValue /= cmpValue
-    then Skip
-    else Continue
+  skipWhen $ regValue /= cmpValue
 runOpcode (5, xIdx, yIdx, 0) = do
-  xValue <- getRegV xIdx
-  yValue <- getRegV yIdx
-  return $ if xValue == yValue
-    then Skip
-    else Continue
+  (x, y) <- getRegV2 xIdx yIdx
+  skipWhen $ x == y
 runOpcode (6, idx, a, b) = do
   let value = packNibbles2 a b
   updateRegV idx value
@@ -88,11 +101,8 @@ runOpcode (8, dstIdx, srcIdx, sel) = do
 
   return Continue
 runOpcode (9, xIdx, yIdx, 0) = do
-  xValue <- getRegV xIdx
-  yValue <- getRegV yIdx
-  return $ if xValue /= yValue
-    then Skip
-    else Continue
+  (x, y) <- getRegV2 xIdx yIdx
+  skipWhen $ x /= y
 runOpcode (0xA, a, b, c) = do
   updateRegI $ packNibbles3 a b c
   return Continue
@@ -108,8 +118,7 @@ runOpcode (0xC, idx, a, b) = do
 
   return Continue
 runOpcode (0xD, xIdx, yIdx, h) = do
-  x <- getRegV xIdx
-  y <- getRegV yIdx
+  (x, y) <- getRegV2 xIdx yIdx
   i <- gets regi
   let drawRow offsetY = do
       memory <- gets mem
@@ -124,22 +133,46 @@ runOpcode (0xD, xIdx, yIdx, h) = do
   return Continue
 runOpcode (0xF, xIdx, 0x2, 0x9) = do
   c <- getRegV xIdx
-  liftIO . print $ c
   let cAddress = fromIntegral c * 5
   updateRegI cAddress
   return Continue
-runOpcode _ = return $ trace "Invalid opcode" Continue
+runOpcode (0xE, xIdx, 0x9, 0xE) = skipWhen =<< getKeyDown =<< getRegV xIdx
+runOpcode (0xE, xIdx, 0xA, 0x1) = skipUnless =<< getKeyDown =<< getRegV xIdx
+runOpcode (0xF, xIdx, 0x0, 0x7) = do
+  v <- gets delayTimer
+  updateRegV v xIdx
+  return Continue
+runOpcode (0xF, xIdx, 0x1, 0x5) = do
+  updateDelayTimer =<< getRegV xIdx
+  return Continue
+runOpcode (0xF, xIdx, 0x1, 0x8) = do
+  updateSoundTimer =<< getRegV xIdx
+  return Continue
+runOpcode (0xF, xIdx, 0x1, 0xE) = do
+  i <- gets regi
+  x <- fromIntegral <$> getRegV xIdx
+  updateRegI $ i + x
+  return Continue
+runOpcode (0xF, xIdx, 0x3, 0x3) = do
+  (hundreds, tens, ones) <- bcd <$> getRegV xIdx
+  i <- fromIntegral <$> gets regi
+  modify $ \m -> m {mem = mem m GV.// [(i, hundreds), (i + 1, tens), (i + 2, ones)]}
+  return Continue
+runOpcode (0xF, xIdx, 0x5, 0x5) = do
+  v <- GV.take (fromIntegral xIdx + 1) <$> gets regv
+  i <- fromIntegral <$> gets regi
+  let updateList = GV.imap (\idx val -> (i + idx, val)) v
+  modify $ \m -> m {mem = mem m `GV.update` updateList}
+  return Continue
+runOpcode (0xF, xIdx, 0x6, 0x5) = do
+  m <- gets mem
+  v <- GV.take (fromIntegral xIdx + 1) <$> gets regv
+  i <- fromIntegral <$> gets regi
+  GV.imapM_ (\idx _ -> updateRegV (fromIntegral idx) $ m GV.! (i + idx)) v
+  return Continue
+runOpcode (a, b, c, d) = return $ trace ("Invalid opcode " ++ showHex (packNibbles4 a b c d) "") Continue
 
--- TODO EX9E
--- TODO EXA1
--- TODO FX07
 -- TODO FX0A
--- TODO FX15
--- TODO FX18
--- TODO FX1E
--- TODO FX33
--- TODO FX55
--- TODO FX65
 
 runOpcodeByte :: Word16 -> MachineST ()
 runOpcodeByte op = do
@@ -156,6 +189,7 @@ runCycleST = do
   currentPc <- gets regpc
   case readWord currentPc memory of
     Just opcode -> do
+      -- lift . print $ showHex opcode ""
       runOpcodeByte opcode
       return True
     Nothing -> return False

@@ -9,6 +9,9 @@ packNibbles2 a b = shiftL a 4 .|. b
 packNibbles3 :: Word8 -> Word8 -> Word8 -> Word16
 packNibbles3 a b c = shiftL (fromIntegral a) 8 .|. shiftL (fromIntegral b) 4 .|. fromIntegral c
 
+packNibbles4 :: Word8 -> Word8 -> Word8 -> Word8 -> Word16
+packNibbles4 a b c d = shiftL (fromIntegral a) 12 .|. shiftL (fromIntegral b) 8 .|. shiftL (fromIntegral c) 4 .|. fromIntegral d
+
 packBytes2 :: Word8 -> Word8 -> Word16
 packBytes2 a b = shiftL (fromIntegral a) 8 .|. fromIntegral b
 
