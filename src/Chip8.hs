@@ -1,6 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Redundant lambda" #-}
 module Chip8 where
 
 import Control.Monad.State.Strict

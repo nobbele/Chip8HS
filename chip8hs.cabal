@@ -25,7 +25,7 @@ library
     Memory
 
   other-modules:
-  ghc-options:     -Wall
+  ghc-options:     -Wall -Wno-unrecognised-pragmas
   build-depends:
     , base        ^>=4.17.2.1
     , containers  ^>=0.6.8
@@ -36,7 +36,7 @@ library
 executable chip8
   hs-source-dirs: app
   main-is:        Main.hs
-  ghc-options:    -Wall
+  ghc-options:    -Wall -Wno-unrecognised-pragmas
   build-depends:
     , base        ^>=4.17.2.1
     , chip8

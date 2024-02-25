@@ -1,6 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Use tuple-section" #-}
 module Machine where
 
 import Control.Monad.State.Strict
